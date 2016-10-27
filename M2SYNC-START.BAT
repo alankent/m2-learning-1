@@ -6,8 +6,8 @@ SETLOCAL
 @rem Start up a Docker container, then sync files between local file system
 @rem and the container.
 
-docker kill %M2SYNC_CONTAINER%
-docker rm %M2SYNC_CONTAINER%
+docker kill %M2SYNC_PROJECT%
+docker rm %M2SYNC_PROJECT%
 docker run -d -p 80:%M2SYNC_HTTP_PORT% -p 3000:%M2SYNC_BROWSERSYNC_PORT% -p 3001:%M2SYNC_BROWSERSYNCADMIN_PORT% -p 5000:%M2SYNC_UNISON_PORT% -p 22:%M2SYNC_SSH_PORT% --name %M2SYNC_PROJECT% %M2SYNC_CONTAINER%
 
 rem Extracting binaries from container to make sure we have compatible version.
