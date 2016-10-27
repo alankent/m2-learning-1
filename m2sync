@@ -1,0 +1,110 @@
+#!/bin/sh
+
+
+# Adjust these settings as required to avoid port conflicts etc.
+M2SYNC_PROJECT=m2-luma
+M2SYNC_CONTAINER=alankent/m2-luma
+M2SYNC_HTTP_PORT=80
+M2SYNC_BROWSERSYNC_PORT=3000
+M2SYNC_BROWSERSYNCADMIN_PORT=3001
+M2SYNC_UNISON_PORT=5000
+M2SYNC_SSH_PORT=22
+
+
+usage () {
+    echo 'Usage: m2sync start|stop|shell'
+    exit 1
+}
+
+start_command () {
+
+    # Start up a Docker container, then sync files between local file system
+    # and the container.
+
+    docker kill $M2SYNC_PROJECT
+    docker rm $M2SYNC_PROJECT
+    docker run -d -p 80:$M2SYNC_HTTP_PORT -p 3000:$M2SYNC_BROWSERSYNC_PORT -p 3001:$M2SYNC_BROWSERSYNCADMIN_PORT -p 5000:$M2SYNC_UNISON_PORT -p 22:$M2SYNC_SSH_PORT --name $M2SYNC_PROJECT $M2SYNC_CONTAINER
+
+    echo 'Extracting binaries from container to make sure we have compatible version.'
+    docker cp $M2SYNC_PROJECT:/mac-osx/Unison .
+    docker cp $M2SYNC_PROJECT:/mac-osx/Unison-fsmonitor .
+
+    LOCAL_ROOT="."
+    REMOTE_ROOT="socket://localhost:$M2SYNC_UNISON_PORT//magento2"
+
+    UNISONARGS="$LOCAL_ROOT $REMOTE_ROOT
+        -prefer $LOCAL_ROOT
+	-preferpartial \"Path var -> $REMOTE_ROOT\"
+	-auto -batch
+	-ignore 'Path var/cache'
+	-ignore 'Path var/composer_home'
+	-ignore 'Path var/log'
+	-ignore 'Path var/page_cache'
+	-ignore 'Path var/session'
+	-ignore 'Path var/tmp'
+	-ignore 'Path pub/media'
+	-ignore 'Path pub/static'
+	-ignore 'Path app/etc/env.php'
+	-ignore 'Path M2SYNC-START.BAT'
+	-ignore 'Path M2SYNC-STOP.BAT'
+	-ignore 'Path M2SYNC-SHELL.BAT'
+	-ignore 'Path M2SYNC-SETTINGS.BAT'
+	-ignore 'Path Dockerfile'
+	-ignore 'Path Vagrantfile'
+	-ignore 'Path .vagrant'
+	-ignore 'Path .git'
+	-ignore 'Path .gitignore'
+	-ignore 'Path .gitattributes'
+	-ignore 'Path .magento'
+	-ignore 'Path .idea'
+	-ignore 'Name {.*.swp}'
+	-ignore 'Name {.unison.*}'
+	"
+	echo $UNISONARGS
+
+
+    echo '*************************************************************************'
+    echo '**** PLEASE BE PATIENT: This can take a few minutes on first startup ****'
+    echo '*************************************************************************'
+
+    echo 'Give container a chance to start up so Unison can connect.'
+    for i in {1..100}; do
+	echo 'Is Unison ready in container yet?'
+	if ./Unison $LOCAL_ROOT $REMOTE_ROOT -batch -auto -testserver; then
+	    break
+	fi
+	sleep 2
+    done
+
+    echo '**** Pulling files from container (faster quiet mode) ****'
+    eval ./Unison $UNISONARGS -silent 2>&1 >/dev/null
+
+    echo '**** Entering file watch mode ****'
+    eval ./Unison $UNISONARGS -repeat watch
+}
+
+
+stop_command () {
+    docker kill $M2SYNC_PROJECT
+    docker rm $M2SYNC_PROJECT
+}
+
+
+shell_command () {
+    docker exec -it $M2SYNC_PROJECT bash
+}
+
+
+# Main program.
+case $# in
+1) ;;
+*) usage ;;
+esac
+
+case $1 in
+start) start_command ;;
+stop) stop_command ;;
+shell) shell_command ;;
+*) usage ;;
+esac
+
